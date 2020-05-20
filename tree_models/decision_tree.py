@@ -61,7 +61,7 @@ class DecisionTree:
                 '{} is a valid criterion only when classifier = True.'.format(criterion)
             )
         if classifier and criterion == 'mse':
-            raise ValueError('mse is a valid criterion only when classifier = False.'.format(criterion))
+            raise ValueError('mse is a valid criterion only when classifier = False.')
 
     def fit(self, X, Y):
         """
