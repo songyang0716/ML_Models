@@ -25,6 +25,7 @@ class XGB:
 		self.min_child_weight = min_child_weight
 		self.objective = objective
 		self.features=features
+		self.trees = {}
 
 	def xgb_tree(self, X, w, m_depth):
 		"""
@@ -48,7 +49,7 @@ class XGB:
 	
 				G_left  = np.sum(X.loc[X[feature] <= cut_value,'g'])
 				G_right = np.sum(X.loc[X[feature] > cut_value,'g'])
-				
+
 				H_left  = np.sum(X.loc[X[feature] <= cut_value,'h'])
 				H_right = np.sum(X.loc[X[feature] > cut_value,'h'])
 
@@ -56,9 +57,11 @@ class XGB:
 				if self.min_child_weight:
 					if (H_left < self.min_child_weight) or (H_right < self.min_child_weight):
 						continue
+
 				cur_gain = 0.5*(G_left**2/(H_left+self.reg_lambda) +
 								G_right**2/(H_right+self.reg_lambda) -
 							   (G_left+G_right)**2/(H_left+H_right+self.reg_lambda)) - self.gamma
+
 				if cur_gain > max_gain:
 					max_gain = cur_gain
 					bst_var = feature
@@ -66,51 +69,77 @@ class XGB:
 					G_left_best, G_right_best, H_left_best, H_right_best = G_left, G_right, H_left, H_right
 
 		# if we failed to find the best split point
-		if best_var is None:
+		if bst_var is None:
 			return None
 		print("The best feature curoff feature is {}, value is {}".format(bst_var, bst_cut))
 		# return prediction value for each leave
-		id_left = X.loc[X[best_var]<best_cut].index.tolist()
+		id_left = X.loc[X[bst_var]<bst_cut].index.tolist()
 		w_left = - G_left_best / (H_left_best + self.reg_lambda)
 
-		id_right = X.loc[X[best_var]>=best_cut].index.tolist()
+		id_right = X.loc[X[bst_var]>=bst_cut].index.tolist()
 		w_right = - G_right_best / (H_right_best + self.reg_lambda)
 
 		w[id_left] = w_left
-		w[id_right] = w_rights
+		w[id_right] = w_right
 
-		tree_structure = {(best_var,best_cut):{}}
-		tree_structure[(best_var,best_cut)][('left',w_left)] = self.xgb_tree(X.loc[id_left], w, m_dpth+1)
-		tree_structure[(best_var,best_cut)][('right',w_right)] = self.xgb_tree(X.loc[id_right], w, m_dpth+1)
+		tree_structure = {(bst_var,bst_cut):{}}
+		tree_structure[(bst_var,bst_cut)][('left',w_left)] = self.xgb_tree(X.loc[id_left], w, m_depth+1)
+		tree_structure[(bst_var,bst_cut)][('right',w_right)] = self.xgb_tree(X.loc[id_right], w, m_depth+1)
 				
 		return tree_structure
 
-
-	def _grad(self, y_hat, Y):
+	def _grad(self, y_hat, y):
 		'''
 		first order derivative
 		'''
 		if self.objective == 'logistic':
-			return np.exp(y_hat)/(1+np.exp(y_hat)) - Y
+			return np.exp(y_hat)/(1+np.exp(y_hat)) - y
 		elif self.objective == 'linear':
-			return y_hat - Y
+			return y_hat - y
 		else:
 			raise KeyError('objective must be linear or logistic!')
 
-
-	def _hessian(self, y_hat, Y):
+	def _hessian(self, y_hat, y):
 		'''
 		second order derivative
 		'''
 		if self.objective == 'logistic':
 			return np.exp(y_hat) / (1+np.exp(y_hat)) / (1+np.exp(y_hat))
 		elif self.objective == 'linear':
-			return np.array([1]*Y.shape[0])
+			return np.array([1]*y.shape[0])
 		else:
 			raise KeyError('objective must be linear or logistic!')
 
-	def fit(self, X, Y):
-		return 
+	def fit(self, X, y):
+		if X.shape[0]!= y.shape[0]:
+			raise ValueError('X and Y must have the same length!')
+		X = X.reset_index(drop=True)
+		y = y.values
+		y_hat = np.array([self.base_score] * y.shape[0])
+
+		for i in range(self.n_estimators):
+			print('fitting tree {}...'.format(i+1))
+
+			X['g'] = self._grad(y_hat, y)
+			X['h'] = self._hessian(y_hat, y)
+
+			f_t = pd.Series([0] * y.shape[0])
+			self.trees[i+1] = self.xgb_tree(X, f_t, 1)
+
+			y_hat = y_hat + self.learning_rate * f_t
+
+			print('tree {} fit done!'.format(i+1))
+			
+		print(self.trees)
+
+
+	# def _get_tree_node_w(self, X, tree, w):
+	# 	'''
+	# 	recursive method, get the tree structure
+	# 	'''
+	# 	if tree:
+	# 		k = list(tree.keys())[0]
+
 
 
 
@@ -129,14 +158,17 @@ def main():
 	df = pd.DataFrame({'x1':x1,
 					   'x2':x2,
 					   'y':y})
+
+	xg_boost_estimator.fit(df[['x1','x2']], df['y'])
+
 	# print (df.shape)
 	# print (df.columns)
 	# feature = 'x1'
 	# print (np.unique(df[feature].values))
 
-	xg_boost_estimator.xgb_tree(df,
-								w=None,
-								m_depth=0)
+	# xg_boost_estimator.xgb_tree(df,
+	# 							w=None,
+	# 							m_depth=0)
 
 
 
