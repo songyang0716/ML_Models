@@ -52,9 +52,21 @@ class XGB:
 				H_right = np.sum(X.loc[X[feature] > cut_value,'h'])
 
 				#https://stats.stackexchange.com/questions/317073/explanation-of-min-child-weight-in-xgboost-algorithm
-				
-		return 	
-
+				if self.min_child_weight:
+					if (H_left < self.min_child_weight) or (H_right < self.min_child_weight):
+						continue
+				cur_gain = 0.5*(G_left**2/(H_left+self.reg_lambda) +
+								G_right**2/(H_right+self.reg_lambda) -
+							   (G_left+G_right)**2/(H_left+H_right+self.reg_lambda)) - self.gamma
+				if cur_gain > max_gain:
+					max_gain = cur_gain
+					bst_var = feature
+					bst_cut = cut_value
+					G_left_best, G_right_best, H_left_best, H_right_best = G_left, G_right, H_left, H_right
+		# if we failed to find the best split point
+		if best_var is None:
+			return None
+		
 
 
 def main():
